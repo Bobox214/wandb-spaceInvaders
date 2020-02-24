@@ -1,0 +1,8 @@
+- Improve performance on GPU : DQN_sanity = ~1130 f/s 
+- DQN with Conv2D as in book
+- Configuration yaml file for model choice and hyperparameter choice
+    referenced on command line arguments
+    model parameter subgroup that impacts weights
+    hashsum used for model naming.
+    wrappers list
+    training parameters (epsilon etc..)

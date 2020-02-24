@@ -41,6 +41,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 devices = tf.config.list_physical_devices()
 logging.info("Tensorflow available devices\n\t"+"\n\t".join(d.name for d in devices))
+#tf.debugging.set_log_device_placement(True)
 
 class ImageProcessWrapper(gym.ObservationWrapper):
   # Preprocessing - crop images, convert them to 1D black and white image tensors
@@ -118,7 +119,8 @@ def finalize():
   agent.save(saveName)
   logging.info(f"Saving model to {saveName}")
   # Speed
-  logging.info(f"Run {episode} episodes at  {frame/(time.time()-startTime):.3f}f/s")
+  duration = time.time()-startTime
+  logging.info(f"Run {episode} episodes in {duration:.0f}s at {frame/duration:.3f}f/s")
   # Record a video
   recordLastRun(env)
 
