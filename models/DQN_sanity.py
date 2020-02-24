@@ -13,7 +13,7 @@ class Model:
         self.learning_rate = config.learning_rate
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.02
-        self.epsilon = 1.0 if not eval else epsilon_min
+        self.epsilon = 1.0 if not eval else self.epsilon_min
         self.gamma = 0.95
         self.model = self._build_model()
         self.modelName = 'DQN_sanity'
