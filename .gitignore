@@ -1,4 +1,6 @@
 *.swp
+*.pyc
 venv/
 video/
 wandb/
+h5/
