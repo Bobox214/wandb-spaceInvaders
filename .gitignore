@@ -1,5 +1,5 @@
 *.swp
-*.pyc
+__pycache__/
 venv/
 video/
 wandb/
