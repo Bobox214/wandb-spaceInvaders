@@ -24,7 +24,7 @@ parser.add_argument("--wandb",action="store_true",help="Log the run in wandb")
 parser.add_argument("-e","--episodes",type=int,default=100,help="Number of episodes to play")
 parser.add_argument("-i","--input",help="Fullname of the file containing save state of the model to be loaded.")
 parser.add_argument("-m","--model",default="DQN_sanity",help="Name of the model to be used.")
-parser.add_argument("--gpu",action="store_true",help="Run on the GPU, else on the CPU.")
+parser.add_argument("--gpu",action="store_true",help="Run on the GPU, else only the CPU.")
 args = parser.parse_args()
 
 if args.wandb and args.input is None:
@@ -42,8 +42,11 @@ logging.basicConfig(format='[%(levelname)s] %(message)s',level=logging.INFO)
 # Tensorflow loading and configuration
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 import tensorflow as tf
-devices = tf.config.list_physical_devices()
-logging.info("Tensorflow available devices\n\t"+"\n\t".join(d.name for d in devices))
+if not args.gpu:
+  # Remove all GPUs
+  tf.config.set_visible_devices([],'GPU')
+devices = tf.config.list_logical_devices()
+logging.info("Tensorflow visible devices\n\t"+"\n\t".join(d.name for d in devices))
 #tf.debugging.set_log_device_placement(True)
 
 # Evaluation
@@ -66,9 +69,9 @@ def evaluate(episodic_reward):
   global cumulative_reward
   episode += 1
   rewards.append(episodic_reward)
-  lastMeanScore = int(sum(rewards)/len(rewards))
+  mean = sum(rewards)//len(rewards)
   speed = frame/(time.time()-startTime)
-  logging.info(f"Episode: {episode:4d} LastMeanScore: {lastMeanScore:4d} Speed: {speed:.3f}f/s "+agent.inlineInfo())
+  logging.info(f"Episode: {episode:4} Score: {episodic_reward:4} Mean: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -130,10 +133,13 @@ def recordLastRun(env):
   env = gym.wrappers.Monitor(env, './video', force=True)
   state = env.reset()
   done = False
+  rewards = 0
   while not done:
     action  = agent.play(state)
-    next_state, _, done, _ = env.step(action)
+    next_state, reward, done, _ = env.step(action)
     state = next_state
+    rewards += reward
+  logging.info(f"\tScore: {rewards}")
 
 ## Initialize gym environment and explore game screens
 env = gym.make("SpaceInvaders-v0")
@@ -143,42 +149,41 @@ env = ImageProcessWrapper(env)
 # Create model and load weights if requested
 #
 module = importlib.import_module(f"models.{args.model}")
-with tf.device(f'/{config.device}:0'):
-  agent = module.Model(env,config,eval=args.wandb)
-  if args.input is not None:
-    agent.load(args.input)
-    logging.info(f"Model for {args.model} loaded from '{args.input}'")
-  logging.info(f"Running {args.episodes} episodes of model '{agent.modelName}'")
+agent = module.Model(env,config,eval=args.wandb)
+if args.input is not None:
+  agent.load(args.input)
+  logging.info(f"Model for {args.model} loaded from '{args.input}'")
+logging.info(f"Running {args.episodes} episodes of model '{agent.modelName}'")
 
-  startTime = time.time()
-  for i in range(config.episodes):
-    # Set reward received in this episode = 0 at the start of the episode
-    episodic_reward = 0
+startTime = time.time()
+for i in range(config.episodes):
+  # Set reward received in this episode = 0 at the start of the episode
+  episodic_reward = 0
 
-    state = env.reset()
+  state = env.reset()
 
-    done = False
-    while not done:
-      frame += 1
-      # get prediction for next action from model
-      action = agent.act(state)
+  done = False
+  while not done:
+    frame += 1
+    # get prediction for next action from model
+    action = agent.act(state)
 
-      # perform the action and fetch next state, reward
-      next_state, reward, done, _ = env.step(action)
-      agent.remember(state, action, reward, next_state, done)
-      state = next_state
+    # perform the action and fetch next state, reward
+    next_state, reward, done, _ = env.step(action)
+    agent.remember(state, action, reward, next_state, done)
+    state = next_state
 
-      episodic_reward += reward
+    episodic_reward += int(reward)
 
-    # call evaluation function - takes in reward received after playing an episode
-    # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
-    evaluate(episodic_reward)
+  # call evaluation function - takes in reward received after playing an episode
+  # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
+  evaluate(episodic_reward)
 
-    agent.train()
+  agent.train()
 
-  finalize()
+finalize()
 
-  env.close()
+env.close()
 
 if args.wandb:
   # ---- Save the model in Weights & Biases ----
