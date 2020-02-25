@@ -2,12 +2,11 @@ import numpy as np
 from collections import deque
 import keras
 import random
+import tensorflow as tf
 
 class Model:
     """
-        Implements the DQN model proposed by wandb in example
-        results:
-            1000 Ep, eps_decay 0.99 , eps_min 0.02 -> LastMeanScore:201 Speed:510f/s
+        Implements the first DQN model published in Nature.
     """
     def __init__(self,env,config,eval):
         self.env    = env
@@ -21,14 +20,17 @@ class Model:
         self.epsilon = 1.0 if not eval else self.epsilon_min
         self.gamma = 0.95
         self.model = self._build_model()
-        self.modelName = 'DQN_sanity'
+        self.modelName = 'DQN_01'
 
     def _build_model(self):
+        inputDim = self.env.observation_space.shape[1]
         model = keras.models.Sequential()
+        model.add(keras.layers.Conv2D(32,kernel_size=8,strides=4, activation='relu'))
+        model.add(keras.layers.Conv2D(64,kernel_size=4,strides=2, activation='relu'))
+        model.add(keras.layers.Conv2D(64,kernel_size=3,strides=1, activation='relu'))
         model.add(keras.layers.Flatten())
-        model.add(keras.layers.Dense(8, activation='relu'))
-        model.add(keras.layers.Dense(16, activation='relu'))
-        model.add(keras.layers.Dense(self.action_size, activation='linear'))
+        model.add(keras.layers.Dense(512, activation='relu'))
+        model.add(keras.layers.Dense(self.action_size))
         model.compile(loss='mse', optimizer=keras.optimizers.Nadam(lr=self.learning_rate))
         return model
 
@@ -43,13 +45,15 @@ class Model:
             return
         minibatch = random.sample(self.memory, self.config.batch_size)
         for state, action, reward, next_state, done in minibatch:
-            target = self.model.predict(state)
+            np_state      = np.expand_dims(state,0)
+            np_next_state = np.expand_dims(next_state,0)
+            target = self.model.predict(np_state)
             if done:
                 target[0][action] = reward
             else:
-                Q_future = max(self.model.predict(next_state)[0])
+                Q_future = max(self.model.predict(np_next_state)[0])
                 target[0][action] = reward+Q_future*self.gamma
-            self.model.fit(state,target,epochs=1,verbose=0) 
+            self.model.fit(np_state,target,epochs=1,verbose=0) 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
@@ -57,10 +61,12 @@ class Model:
         if np.random.random() < self.epsilon:
             return self.env.action_space.sample()
         else:
-            return np.argmax(self.model.predict(state)[0])
+            np_state = np.expand_dims(state,0)
+            return np.argmax(self.model.predict(np_state)[0])
 
     def play(self,state):
-        return np.argmax(self.model.predict(state)[0])
+        np_state = np.expand_dims(state,0)
+        return np.argmax(self.model.predict(np_state)[0])
 
     def save(self, name):
         self.model.save(name)

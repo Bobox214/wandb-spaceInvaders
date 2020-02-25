@@ -15,6 +15,8 @@ import cv2
 import base64
 from collections import deque
 
+from wrappers import *
+
 # Add argument parsing
 import argparse
 parser = argparse.ArgumentParser()
@@ -22,6 +24,7 @@ parser.add_argument("--wandb",action="store_true",help="Log the run in wandb")
 parser.add_argument("-e","--episodes",type=int,default=100,help="Number of episodes to play")
 parser.add_argument("-i","--input",help="Fullname of the file containing save state of the model to be loaded.")
 parser.add_argument("-m","--model",default="DQN_sanity",help="Name of the model to be used.")
+parser.add_argument("--gpu",action="store_true",help="Run on the GPU, else on the CPU.")
 args = parser.parse_args()
 
 if args.wandb and args.input is None:
@@ -42,31 +45,6 @@ import tensorflow as tf
 devices = tf.config.list_physical_devices()
 logging.info("Tensorflow available devices\n\t"+"\n\t".join(d.name for d in devices))
 #tf.debugging.set_log_device_placement(True)
-
-class ImageProcessWrapper(gym.ObservationWrapper):
-  # Preprocessing - crop images, convert them to 1D black and white image tensors
-  #   Image dimensions - (210, 160, 3)
-  #   Output dimensions - (88, 80, 1)
-  color = np.array([210, 164, 74]).mean()
-  def __init__(self,env=None):
-    super().__init__(env)
-    self.observation_space = gym.spaces.Box(low=0,high=255,shape=(88,80,1),dtype=np.uint8)
-  def observation(self,obs):
-    return self.process(obs)
-  @staticmethod
-  def process(frame):
-    # Crop and resize
-    img = frame[25:201:2, ::2]
-    # Convert to greyscale
-    img = img.mean(axis=2)
-    # Improve contrast
-    img[img==ImageProcessWrapper.color] = 0
-    # Normalize
-    img = (img - 128) / 128 - 1
-    # Reshape
-    img = img.reshape(88,80)
-    return img 
-
 
 # Evaluation
 
@@ -129,35 +107,19 @@ def signal_handler(sig,f):
   sys.exit(11)
 signal.signal(signal.SIGINT,signal_handler)
 
+class Config:pass
+config = Config()
+config.episodes = args.episodes
+config.batch_size = 32
+config.learning_rate = 0.003
+config.device = 'gpu' if args.gpu else 'cpu'
+
 if args.wandb:
   # initialize a new wandb run
   wandb.init(project="qualcomm")
-
   # define hyperparameters
-  wandb.config.episodes = args.episodes
-  wandb.config.batch_size = 32
-  wandb.config.learning_rate = 0.003
-  config = wandb.config
-else:
-  class Config:pass
-  config = Config()
-  config.episodes = args.episodes
-  config.batch_size = 32
-  config.learning_rate = 0.003
-
-## Initialize gym environment and explore game screens
-env = gym.make("SpaceInvaders-v0")
-env = ImageProcessWrapper(env)
-
-#
-# Create model and load weights if requested
-#
-module = importlib.import_module(f"models.{args.model}")
-agent = module.Model(env,config,eval=args.wandb)
-if args.input is not None:
-  agent.load(args.input)
-  logging.info(f"Model for {args.model} loaded from '{args.input}'")
-logging.info(f"Running {args.episodes} episodes of model '{agent.modelName}'")
+  for k,v in config.__dict__.items():
+      setattr(wandb.config,k,v)
 
 recorded = False
 def recordLastRun(env):
@@ -173,36 +135,50 @@ def recordLastRun(env):
     next_state, _, done, _ = env.step(action)
     state = next_state
 
+## Initialize gym environment and explore game screens
+env = gym.make("SpaceInvaders-v0")
+env = ImageProcessWrapper(env)
 
-startTime = time.time()
-for i in range(config.episodes):
-  # Set reward received in this episode = 0 at the start of the episode
-  episodic_reward = 0
+#
+# Create model and load weights if requested
+#
+module = importlib.import_module(f"models.{args.model}")
+with tf.device(f'/{config.device}:0'):
+  agent = module.Model(env,config,eval=args.wandb)
+  if args.input is not None:
+    agent.load(args.input)
+    logging.info(f"Model for {args.model} loaded from '{args.input}'")
+  logging.info(f"Running {args.episodes} episodes of model '{agent.modelName}'")
 
-  state = env.reset()
+  startTime = time.time()
+  for i in range(config.episodes):
+    # Set reward received in this episode = 0 at the start of the episode
+    episodic_reward = 0
 
-  done = False
-  while not done:
-    frame += 1
-    # get prediction for next action from model
-    action = agent.act(state)
+    state = env.reset()
 
-    # perform the action and fetch next state, reward
-    next_state, reward, done, _ = env.step(action)
-    agent.remember(state, action, reward, next_state, done)
-    state = next_state
+    done = False
+    while not done:
+      frame += 1
+      # get prediction for next action from model
+      action = agent.act(state)
 
-    episodic_reward += reward
+      # perform the action and fetch next state, reward
+      next_state, reward, done, _ = env.step(action)
+      agent.remember(state, action, reward, next_state, done)
+      state = next_state
 
-  # call evaluation function - takes in reward received after playing an episode
-  # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
-  evaluate(episodic_reward)
+      episodic_reward += reward
 
-  agent.train()
+    # call evaluation function - takes in reward received after playing an episode
+    # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
+    evaluate(episodic_reward)
 
-finalize()
+    agent.train()
 
-env.close()
+  finalize()
+
+  env.close()
 
 if args.wandb:
   # ---- Save the model in Weights & Biases ----
