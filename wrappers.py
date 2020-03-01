@@ -19,7 +19,7 @@ class ImageProcessWrapper(gym.ObservationWrapper):
     # Convert to greyscale
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     # Normalize
-    img = img/256
+    img = (img/128)-1
     # Reshape
     img = np.expand_dims(img,2)
     return img 

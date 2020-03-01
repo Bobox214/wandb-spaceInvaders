@@ -52,7 +52,7 @@ class Model:
         states,actions,rewards,next_states,dones = zip(*(self.memory[idx] for idx in indices))
         states_a = np.array(states)
         targets_a = self.model.predict(states_a)
-        self.predictQ = np.mean(Q_futures_a)
+        self.predictQ = np.mean(targets_a)
         next_states_a = np.array(next_states)
         dones_a = np.array(dones)
         Q_futures_a = np.amax(self.target_model.predict(next_states_a),1)
