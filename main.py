@@ -14,6 +14,7 @@ import os,sys
 import cv2
 import base64
 from collections import deque
+import logging
 
 from wrappers import *
 
@@ -36,7 +37,6 @@ if args.wandb and args.episodes != 100:
       sys.exit(12)
 
 # Logging
-import logging
 logging.basicConfig(format='[%(levelname)s] %(message)s',level=logging.INFO)
 
 # Tensorflow loading and configuration
@@ -71,7 +71,7 @@ def evaluate(episodic_reward):
   rewards.append(episodic_reward)
   mean = sum(rewards)//len(rewards)
   speed = frame/(time.time()-startTime)
-  logging.info(f"Episode: {episode:4} Score: {episodic_reward:4} Mean: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
+  logging.info(f"Episode: {episode:4} Frame: {frame//1000}k Score: {episodic_reward:4} Mean: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -113,7 +113,9 @@ signal.signal(signal.SIGINT,signal_handler)
 class Config:pass
 config = Config()
 config.episodes = args.episodes
-config.batch_size = 32
+config.batch_size = 64
+config.min_experience_size = 5000
+config.experience_buffer_size = 100000
 config.learning_rate = 0.003
 config.device = 'gpu' if args.gpu else 'cpu'
 
@@ -134,11 +136,15 @@ def recordLastRun(env):
   state = env.reset()
   done = False
   rewards = 0
+  frame = 0
   while not done:
-    action  = agent.play(state)
+    action,Qs  = agent.play(state)
     next_state, reward, done, _ = env.step(action)
     state = next_state
     rewards += reward
+    if frame%100==0:
+      logging.info(f"F:{frame//100} Qs: {Qs} Action: {action}")
+    frame += 1
   logging.info(f"\tScore: {rewards}")
 
 ## Initialize gym environment and explore game screens

@@ -2,5 +2,7 @@
 __pycache__/
 venv/
 video/
+image/
 wandb/
 h5/
+gits/

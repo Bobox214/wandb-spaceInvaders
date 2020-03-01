@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import cv2
 
 class ImageProcessWrapper(gym.ObservationWrapper):
   # Preprocessing - crop images, convert them to 1D black and white image tensors
@@ -16,12 +17,10 @@ class ImageProcessWrapper(gym.ObservationWrapper):
     # Crop and resize
     img = frame[25:201:2, ::2]
     # Convert to greyscale
-    img = img.mean(axis=2)
-    # Improve contrast
-    img[img==ImageProcessWrapper.color] = 0
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     # Normalize
-    img = (img - 128) / 128 - 1
+    img = img/256
     # Reshape
-    img = img.reshape(88,80,1)
+    img = np.expand_dims(img,2)
     return img 
 
