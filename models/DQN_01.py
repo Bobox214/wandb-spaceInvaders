@@ -17,25 +17,35 @@ class Model:
         self.memory = deque(maxlen=config.experience_buffer_size)
         self.action_size = env.action_space.n
         self.learning_rate = config.learning_rate
-        self.epsilon_decay = 0.99
-        self.epsilon_min = 0.02
+        self.epsilon_endFrame = 1000000
+        self.epsilon_min = 0.1
         self.epsilon = 1.0 if not eval else self.epsilon_min
-        self.gamma = 0.95
+        self.modelCopyRate = 10000
+        self.gamma = 0.99
         self.model        = self._build_model()
         self.target_model = self._build_model()
         self.modelName = 'DQN_01'
         self.loss = 0
         self.predictQ = 0
+        self.nextCopy = self.modelCopyRate
 
     def _build_model(self):
-        model = keras.models.Sequential()
-        model.add(keras.layers.Conv2D(32,kernel_size=8,strides=4, activation='relu', input_shape=self.env.observation_space.shape))
-        model.add(keras.layers.Conv2D(64,kernel_size=4,strides=2, activation='relu'))
-        model.add(keras.layers.Conv2D(64,kernel_size=3,strides=1, activation='relu'))
-        model.add(keras.layers.Flatten())
-        model.add(keras.layers.Dense(512, activation='relu'))
-        model.add(keras.layers.Dense(self.action_size))
-        model.compile(loss='mse', optimizer=keras.optimizers.Nadam(lr=self.learning_rate))
+        I = keras.layers.Input(self.env.observation_space.shape, name='frames')
+        X = keras.layers.Lambda(lambda x: x / 255.0)(I)
+        X = keras.layers.Conv2D(32,kernel_size=8,strides=4, activation='relu')(X)
+        X = keras.layers.Conv2D(64,kernel_size=4,strides=2, activation='relu')(X)
+        X = keras.layers.Conv2D(64,kernel_size=3,strides=1, activation='relu')(X)
+        X = keras.layers.Flatten()(X)
+        X = keras.layers.Dense(512, activation='relu')(X)
+        X = keras.layers.Dense(self.action_size)(X)
+
+        J = keras.layers.Input((self.action_size,), name='mask')
+
+        O = keras.layers.Multiply()([X,J])
+
+        model = keras.models.Model(inputs=[I,J], outputs=O)
+        model.compile(loss='mse',optimizer=keras.optimizers.RMSprop(lr=0.00025, rho=0.95, epsilon=0.01))
+
         return model
 
     def inlineInfo(self):
@@ -43,44 +53,44 @@ class Model:
 
     def remember(self, state, action, reward, next_state, done):
         #logging.info(f"APP {action} -> {reward} : {done}")
-        self.memory.append((state, action, reward, next_state, done))
+        oneHotAction = [(i==action) for i in range(self.action_size)]
+        self.memory.append((state, oneHotAction, reward, next_state, done))
 
-    def train(self):
+    def train(self,frameIdx):
         if self.eval or len(self.memory) < self.config.min_experience_size:
             return
         indices = np.random.choice(len(self.memory),self.config.batch_size,replace=False)
         states,actions,rewards,next_states,dones = zip(*(self.memory[idx] for idx in indices))
-        states_a = np.array(states)
-        targets_a = self.model.predict(states_a)
-        self.predictQ = np.mean(targets_a)
+        states_a  = np.array(states)
+        actions_a = np.array(actions)
+        rewards_a = np.array(rewards)
+        dones_a   = np.array(dones)
         next_states_a = np.array(next_states)
-        dones_a = np.array(dones)
-        Q_futures_a = np.amax(self.target_model.predict(next_states_a),1)
-        Q_futures_a[dones_a] = 0
-        for i in range(self.config.batch_size):
-            targets_a[i][actions[i]] = rewards[i]+Q_futures_a[i]*self.gamma
 
-        self.loss = self.model.train_on_batch(states_a,targets_a) 
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+        next_Q_a = self.target_model.predict([next_states_a,np.ones(actions_a.shape)])
+        next_Q_a[dones_a] = 0
+        targets_a = rewards_a + self.gamma*np.max(next_Q_a,axis=1) 
+        self.predictQ = np.mean(targets_a)
 
-        TAU = 0.3
-        model_weights = self.model.get_weights()
-        target_model_weights = self.target_model.get_weights()
-        for i in range(len(model_weights)):
-            target_model_weights[i] = TAU * model_weights[i] + (1 - TAU) * target_model_weights[i]
-        self.target_model.set_weights(target_model_weights)
+        self.loss = self.model.train_on_batch([states_a,actions_a],actions_a*targets_a[:,None]) 
+
+        if frameIdx<self.epsilon_endFrame:
+            self.epsilon = (1-self.epsilon_min)*(self.epsilon_endFrame-frameIdx)/self.epsilon_endFrame+self.epsilon_min
+
+        if frameIdx>self.nextCopy:
+            self.target_model.set_weights(self.model.get_weights())
+            self.nextCopy += self.modelCopyRate
 
     def act(self, state):
         if np.random.random() < self.epsilon:
             return self.env.action_space.sample()
         else:
             np_state = np.expand_dims(state,0)
-            return np.argmax(self.model.predict(np_state)[0])
+            return np.argmax(self.model.predict([np_state,np.ones((1,self.action_size))])[0])
 
     def play(self,state):
         np_state = np.expand_dims(state,0)
-        Qs = self.model.predict(np_state)[0]
+        Qs = self.model.predict([np_state,np.ones((1,self.action_size))])[0]
         action = np.argmax(Qs)
         return action,Qs
 

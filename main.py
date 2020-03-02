@@ -113,7 +113,7 @@ signal.signal(signal.SIGINT,signal_handler)
 class Config:pass
 config = Config()
 config.episodes = args.episodes
-config.batch_size = 64
+config.batch_size = 32
 config.min_experience_size = 5000
 config.experience_buffer_size = 100000
 config.learning_rate = 0.003
@@ -150,6 +150,7 @@ def recordLastRun(env):
 ## Initialize gym environment and explore game screens
 env = gym.make("SpaceInvaders-v0")
 env = ImageProcessWrapper(env)
+env = FrameStackWrapper(env)
 
 #
 # Create model and load weights if requested
@@ -185,7 +186,7 @@ for i in range(config.episodes):
   # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
   evaluate(episodic_reward)
 
-  agent.train()
+  agent.train(frame)
 
 finalize()
 
