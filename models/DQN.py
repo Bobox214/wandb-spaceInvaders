@@ -24,7 +24,6 @@ class Model:
         self.gamma = 0.99
         self.model        = self._build_model()
         self.target_model = self._build_model()
-        self.modelName = 'DQN_01'
         self.loss = 0
         self.predictQ = 0
         self.nextCopy = self.modelCopyRate

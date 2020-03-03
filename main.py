@@ -15,6 +15,7 @@ import cv2
 import base64
 from collections import deque
 import logging
+from PIL import Image
 
 from wrappers import *
 
@@ -24,7 +25,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--wandb",action="store_true",help="Log the run in wandb")
 parser.add_argument("-e","--episodes",type=int,default=100,help="Number of episodes to play")
 parser.add_argument("-i","--input",help="Fullname of the file containing save state of the model to be loaded.")
-parser.add_argument("-m","--model",default="DQN_sanity",help="Name of the model to be used.")
+parser.add_argument("-m","--model",default="DQN",help="Name of the model to be used.")
+parser.add_argument("-n","--name",help="Name used for storing logs.")
 parser.add_argument("--gpu",action="store_true",help="Run on the GPU, else only the CPU.")
 args = parser.parse_args()
 
@@ -36,8 +38,20 @@ if args.wandb and args.episodes != 100:
       logging.fatal("When logging to WanDB with --wandb, number of episodes must be 100")
       sys.exit(12)
 
+if args.name is not None:
+    baseName = args.name
+else:
+    baseName = args.model
+curTimeS = time.strftime("%Y%m%d_%H%M")
+saveBaseName = os.path.join("log",f"{baseName}_{curTimeS}")
+
 # Logging
 logging.basicConfig(format='[%(levelname)s] %(message)s',level=logging.INFO)
+logF = logging.FileHandler(saveBaseName+'.log')
+logF.setLevel(logging.INFO)
+logF.setFormatter(logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s'))
+logging.getLogger('').addHandler(logF)
+logging.info(f"Logging to file '{saveBaseName}.log'")
 
 # Tensorflow loading and configuration
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
@@ -69,9 +83,10 @@ def evaluate(episodic_reward):
   global cumulative_reward
   episode += 1
   rewards.append(episodic_reward)
-  mean = sum(rewards)//len(rewards)
-  speed = frame/(time.time()-startTime)
-  logging.info(f"Episode: {episode:4} Frame: {frame//1000}k Score: {episodic_reward:4} Mean: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
+  if episode%10==0:
+    mean = sum(rewards)//len(rewards)
+    speed = frame/(time.time()-startTime)
+    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean50: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -96,7 +111,7 @@ import signal
 
 def finalize():
   # Save the model
-  saveName = os.path.join("h5",f"{agent.modelName}_{os.getpid()}.h5")
+  saveName = saveBaseName+'.h5'
   agent.save(saveName)
   logging.info(f"Saving model to {saveName}")
   # Speed
@@ -146,10 +161,16 @@ def recordLastRun(env):
       logging.info(f"F:{frame//100} Qs: {Qs} Action: {action}")
     frame += 1
   logging.info(f"\tScore: {rewards}")
+  # Find video and move it to saveBaseName
+  mp4list = glob.glob('video/*.mp4')
+  if len(mp4list) > 0:
+    mp4 = mp4list[-1]
+    os.system(f'mv {mp4} {saveBaseName}.mp4')
 
 ## Initialize gym environment and explore game screens
 env = gym.make("SpaceInvaders-v0")
 env = ImageProcessWrapper(env)
+env = MaxAndSkipWrapper(env)
 env = FrameStackWrapper(env)
 
 #
@@ -160,7 +181,7 @@ agent = module.Model(env,config,eval=args.wandb)
 if args.input is not None:
   agent.load(args.input)
   logging.info(f"Model for {args.model} loaded from '{args.input}'")
-logging.info(f"Running {args.episodes} episodes of model '{agent.modelName}'")
+logging.info(f"Running {args.episodes} episodes of model '{args.model}'")
 
 startTime = time.time()
 for i in range(config.episodes):

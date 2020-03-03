@@ -4,5 +4,5 @@ venv/
 video/
 image/
 wandb/
-h5/
+log/
 gits/
