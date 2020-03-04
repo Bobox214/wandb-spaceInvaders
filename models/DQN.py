@@ -59,19 +59,14 @@ class Model:
         if self.eval or len(self.memory) < self.config.min_experience_size:
             return
         indices = np.random.choice(len(self.memory),self.config.batch_size,replace=False)
-        states,actions,rewards,next_states,dones = zip(*(self.memory[idx] for idx in indices))
-        states_a  = np.array(states)
-        actions_a = np.array(actions)
-        rewards_a = np.array(rewards)
-        dones_a   = np.array(dones)
-        next_states_a = np.array(next_states)
+        states,actions,rewards,next_states,dones = map(np.array,zip(*(self.memory[idx] for idx in indices)))
 
-        next_Q_a = self.target_model.predict([next_states_a,np.ones(actions_a.shape)])
-        next_Q_a[dones_a] = 0
-        targets_a = rewards_a + self.gamma*np.max(next_Q_a,axis=1) 
-        self.predictQ = np.mean(targets_a)
+        next_Q = self.target_model.predict([next_states,np.ones(actions.shape)])
+        next_Q[dones] = 0
+        targets = rewards + self.gamma*np.max(next_Q,axis=1) 
+        self.predictQ = np.mean(targets)
 
-        self.loss = self.model.train_on_batch([states_a,actions_a],actions_a*targets_a[:,None]) 
+        self.loss = self.model.train_on_batch([states,actions],actions*targets[:,None]) 
 
         if frameIdx<self.epsilon_endFrame:
             self.epsilon = (1-self.epsilon_min)*(self.epsilon_endFrame-frameIdx)/self.epsilon_endFrame+self.epsilon_min

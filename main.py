@@ -3,6 +3,7 @@ from gym import logger as gymlogger
 from gym.wrappers import Monitor
 gymlogger.set_level(30)
 
+import resource
 import time
 import numpy as np
 import wandb
@@ -42,7 +43,7 @@ if args.name is not None:
     baseName = args.name
 else:
     baseName = args.model
-curTimeS = time.strftime("%Y%m%d_%H%M")
+curTimeS = time.strftime("%Y%m%d_%H%M%S")
 saveBaseName = os.path.join("log",f"{baseName}_{curTimeS}")
 
 # Logging
@@ -83,10 +84,11 @@ def evaluate(episodic_reward):
   global cumulative_reward
   episode += 1
   rewards.append(episodic_reward)
-  if episode%10==0:
+  if episode==1 or episode%10==0:
     mean = sum(rewards)//len(rewards)
     speed = frame/(time.time()-startTime)
-    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean50: {mean:4} Speed: {speed:.3f}f/s "+agent.inlineInfo())
+    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1024*1024)
+    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean50: {mean:4} Speed: {speed:.3f}f/s Mem: {mem:2.2f}GB "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -114,11 +116,14 @@ def finalize():
   saveName = saveBaseName+'.h5'
   agent.save(saveName)
   logging.info(f"Saving model to {saveName}")
+  recordLastRun(env)
   # Speed
   duration = time.time()-startTime
   logging.info(f"Run {episode} episodes in {duration:.0f}s at {frame/duration:.3f}f/s")
+  # Memory consumption
+  mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+  logging.info(f"Memory peak: {mem/(1024*1024):0.2f}GB")
   # Record a video
-  recordLastRun(env)
 
 def signal_handler(sig,f):
   finalize()
@@ -129,8 +134,8 @@ class Config:pass
 config = Config()
 config.episodes = args.episodes
 config.batch_size = 32
-config.min_experience_size = 5000
-config.experience_buffer_size = 100000
+config.min_experience_size = 50000
+config.experience_buffer_size = 1000000
 config.learning_rate = 0.003
 config.device = 'gpu' if args.gpu else 'cpu'
 
@@ -167,11 +172,12 @@ def recordLastRun(env):
     mp4 = mp4list[-1]
     os.system(f'mv {mp4} {saveBaseName}.mp4')
 
-## Initialize gym environment and explore game screens
+## Initialize gym environment
 env = gym.make("SpaceInvaders-v0")
-env = ImageProcessWrapper(env)
 env = MaxAndSkipWrapper(env)
+env = ImageProcessWrapper(env)
 env = FrameStackWrapper(env)
+env = ClipRewardWrapper(env)
 
 #
 # Create model and load weights if requested
