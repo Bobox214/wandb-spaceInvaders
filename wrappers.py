@@ -17,6 +17,7 @@ class ImageProcessWrapper(gym.ObservationWrapper):
         return obs 
 
 class FrameStackWrapper(gym.ObservationWrapper):
+    # Return a stack the last n observations.
     def __init__(self, env, n_steps=4):
         super().__init__(env)
         old_space = env.observation_space
@@ -64,4 +65,45 @@ class ClipRewardWrapper(gym.Wrapper):
     def step(self,action):
         obs,reward,done,info=self.env.step(action)
         return obs,np.sign(reward),done,info
+
+class NoopResetWrapper(gym.Wrapper):
+    # Apply a random number of NoOp action after each reset.
+    # Nobody seems to know why it helps convergence.
+    # But it seems to work
+    def __init__(self,env,noop_max=30):
+        super().__init__(env)
+        self.noop_max = noop_max
+        assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
+    def reset(self,**kwargs):
+        self.env.reset(**kwargs)
+        noops = np.random.randint(1,self.noop_max+1)
+        obs = None
+        for _ in range(noops):
+            obs,_,done,_ = self.env.step(0)
+            if done:
+                obs = self.env.reset(**kwargs)
+        return obs
+
+class LossLifeResetWrapper(gym.Wrapper):
+    # Return done on each loss of life.
+    # Only perform a real reset when there was a real done
+    def __init__(self,env):
+        super().__init__(env)
+        self.lives = 0
+        self.realDone = True
+    def step(self,action):
+        obs,reward,done,info = self.env.step(action)
+        self.realDone = done
+        lives = self.env.unwrapped.ale.lives()
+        if lives < self.lives and lives>0:
+            done = True
+        self.lives = lives
+        return obs,reward,done,info
+    def reset(self,**kwargs):
+        if self.realDone:
+            obs = super().reset(**kwargs)
+        else:
+            obs,_,_,_ = self.env.step(0)
+        self.lives = self.env.unwrapped.ale.lives()
+        return obs
 

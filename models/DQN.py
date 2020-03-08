@@ -4,6 +4,7 @@ import keras
 import random
 import tensorflow as tf
 import logging
+from helpers import *
 
 class Model:
     """
@@ -14,7 +15,7 @@ class Model:
         self.env    = env
         self.eval   = eval
         self.config = config
-        self.memory = deque(maxlen=config.experience_buffer_size)
+        self.memory = ExperienceBuffer(size=config.experience_buffer_size)
         self.action_size = env.action_space.n
         self.learning_rate = config.learning_rate
         self.epsilon_endFrame = 1000000
@@ -59,7 +60,7 @@ class Model:
         if self.eval or len(self.memory) < self.config.min_experience_size:
             return
         indices = np.random.choice(len(self.memory),self.config.batch_size,replace=False)
-        states,actions,rewards,next_states,dones = map(np.array,zip(*(self.memory[idx] for idx in indices)))
+        states,actions,rewards,next_states,dones = self.memory.sample(self.config.batch_size)
 
         next_Q = self.target_model.predict([next_states,np.ones(actions.shape)])
         next_Q[dones] = 0

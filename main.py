@@ -24,7 +24,8 @@ from wrappers import *
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--wandb",action="store_true",help="Log the run in wandb")
-parser.add_argument("-e","--episodes",type=int,default=100,help="Number of episodes to play")
+parser.add_argument("-e","--episodes",type=int,default=-1,help="Number of episodes to play")
+parser.add_argument("-f","--frames",type=int,default=-1,help="Number of k-frames to play")
 parser.add_argument("-i","--input",help="Fullname of the file containing save state of the model to be loaded.")
 parser.add_argument("-m","--model",default="DQN",help="Name of the model to be used.")
 parser.add_argument("-n","--name",help="Name used for storing logs.")
@@ -119,7 +120,7 @@ def finalize():
   recordLastRun(env)
   # Speed
   duration = time.time()-startTime
-  logging.info(f"Run {episode} episodes in {duration:.0f}s at {frame/duration:.3f}f/s")
+  logging.info(f"Run {episode} episodes and {frame/1000}k frames in {duration:.0f}s at {frame/duration:.3f}f/s")
   # Memory consumption
   mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
   logging.info(f"Memory peak: {mem/(1024*1024):0.2f}GB")
@@ -133,6 +134,7 @@ signal.signal(signal.SIGINT,signal_handler)
 class Config:pass
 config = Config()
 config.episodes = args.episodes
+config.frames = args.frames*1000
 config.batch_size = 32
 config.min_experience_size = 50000
 config.experience_buffer_size = 1000000
@@ -174,10 +176,13 @@ def recordLastRun(env):
 
 ## Initialize gym environment
 env = gym.make("SpaceInvaders-v0")
+#env = gym.make("PongNoFrameskip-v4")
 env = MaxAndSkipWrapper(env)
 env = ImageProcessWrapper(env)
 env = FrameStackWrapper(env)
 env = ClipRewardWrapper(env)
+env = NoopResetWrapper(env)
+env = LossLifeResetWrapper(env)
 
 #
 # Create model and load weights if requested
@@ -187,10 +192,17 @@ agent = module.Model(env,config,eval=args.wandb)
 if args.input is not None:
   agent.load(args.input)
   logging.info(f"Model for {args.model} loaded from '{args.input}'")
-logging.info(f"Running {args.episodes} episodes of model '{args.model}'")
+if args.frames != -1:
+    logging.info(f"Running {args.frames}k frames of model '{args.model}'")
+else:
+    logging.info(f"Running {args.episodes} episodes of model '{args.model}'")
 
 startTime = time.time()
-for i in range(config.episodes):
+while True:
+  if config.episodes != -1 and episode>=config.episodes:
+      break
+  if config.frames != -1 and frame>=config.frames:
+      break
   # Set reward received in this episode = 0 at the start of the episode
   episodic_reward = 0
 
