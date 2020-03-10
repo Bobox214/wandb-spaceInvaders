@@ -3,6 +3,7 @@ from gym import logger as gymlogger
 from gym.wrappers import Monitor
 gymlogger.set_level(30)
 
+from pong.wrappers import make_env
 import resource
 import time
 import numpy as np
@@ -54,6 +55,7 @@ logF.setLevel(logging.INFO)
 logF.setFormatter(logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s'))
 logging.getLogger('').addHandler(logF)
 logging.info(f"Logging to file '{saveBaseName}.log'")
+logging.info("Launched command = 'python %s'"%(" ".join(sys.argv)))
 
 # Tensorflow loading and configuration
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
@@ -136,10 +138,13 @@ config = Config()
 config.episodes = args.episodes
 config.frames = args.frames*1000
 config.batch_size = 32
-config.min_experience_size = 50000
-config.experience_buffer_size = 1000000
-config.learning_rate = 0.003
+config.min_experience_size    = 10000
+config.experience_buffer_size = 10000
+config.learning_rate = 1e-4
 config.device = 'gpu' if args.gpu else 'cpu'
+config.epsilon_start = 1.0
+config.epsilon_end   = 0.02
+config.epsilon_decay_last_frame = 10**5
 
 if args.wandb:
   # initialize a new wandb run
@@ -175,14 +180,16 @@ def recordLastRun(env):
     os.system(f'mv {mp4} {saveBaseName}.mp4')
 
 ## Initialize gym environment
-env = gym.make("SpaceInvaders-v0")
+#env = gym.make("SpaceInvaders-v0")
 #env = gym.make("PongNoFrameskip-v4")
-env = MaxAndSkipWrapper(env)
-env = ImageProcessWrapper(env)
-env = FrameStackWrapper(env)
-env = ClipRewardWrapper(env)
-env = NoopResetWrapper(env)
-env = LossLifeResetWrapper(env)
+#env = MaxAndSkipWrapper(env)
+#env = ImageProcessWrapper(env)
+#env = FrameStackWrapper(env)
+#env = ClipRewardWrapper(env)
+#env = NoopResetWrapper(env)
+#env = LossLifeResetWrapper(env)
+env = make_env("PongNoFrameskip-v4",pytorch=False)
+#env = make_env("SpaceInvaders-v0",pytorch=False)
 
 #
 # Create model and load weights if requested
@@ -221,11 +228,13 @@ while True:
 
     episodic_reward += int(reward)
 
+    # Train
+    agent.train(frame)
+
   # call evaluation function - takes in reward received after playing an episode
   # calculates the cumulative_avg_reward over args.episodes & logs it in wandb
   evaluate(episodic_reward)
 
-  agent.train(frame)
 
 finalize()
 

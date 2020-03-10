@@ -1,0 +1,5 @@
+--------
+ebf0cd8c4ce510dec89687ef3df1534c5657abcf
+python 01_dqn_pong.py
+# Solved in 1192343 frames
+# Speed 36.55 f/s
