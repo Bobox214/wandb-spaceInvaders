@@ -67,14 +67,15 @@ class Agent:
             action = env.action_space.sample()
         else:
             state_a = np.array([self.state], copy=False)
-            q_vals = net.predict([state_a])
+            q_vals = net.predict([state_a,np.ones((1,env.action_space.n))])
             action = np.argmax(q_vals)
 
         # do step in the environment
         new_state, reward, is_done, _ = self.env.step(action)
         self.total_reward += reward
 
-        exp = Experience(self.state, action, reward, is_done, new_state)
+        oneHotAction = [(i==action) for i in range(self.env.action_space.n)]
+        exp = Experience(self.state, oneHotAction, reward, is_done, new_state)
         self.exp_buffer.append(exp)
         self.state = new_state
         if is_done:
@@ -84,16 +85,18 @@ class Agent:
 
 def DQN(input_shape,n_actions):
     X = I = keras.layers.Input(input_shape, name='frames')
-    #X = keras.layers.Lambda(lambda x: x / 255.0)(I)
     X = keras.layers.Conv2D(32,kernel_size=8,strides=4, activation='relu')(X)
     X = keras.layers.Conv2D(64,kernel_size=4,strides=2, activation='relu')(X)
     X = keras.layers.Conv2D(64,kernel_size=3,strides=1, activation='relu')(X)
     X = keras.layers.Flatten()(X)
     X = keras.layers.Dense(512, activation='relu')(X)
     X = keras.layers.Dense(n_actions)(X)
-    O = X
 
-    model = keras.models.Model(inputs=[I], outputs=O)
+    J = keras.layers.Input((n_actions,), name='mask')
+
+    O = keras.layers.Multiply()([X,J])
+
+    model = keras.models.Model(inputs=[I,J], outputs=O)
     model.compile(loss='mse',optimizer=keras.optimizers.Adam(lr=LEARNING_RATE))
 
     return model
@@ -102,12 +105,11 @@ def DQN(input_shape,n_actions):
 def calc_loss(batch, net, tgt_net):
 
     states, actions, rewards, dones, next_states = batch
-    targets = net.predict(states)
-    next_Q = tgt_net.predict(next_states)
+    next_Q = tgt_net.predict([next_states,np.ones(actions.shape)])
     next_Q[dones==1] = 0
-    targets[range(len(actions)),actions] = rewards + GAMMA*np.max(next_Q,axis=1) 
+    targets = rewards + GAMMA*np.max(next_Q,axis=1) 
 
-    net.train_on_batch(states,targets) 
+    net.train_on_batch([states,actions],actions*targets[:,None]) 
 
 
 if __name__ == "__main__":

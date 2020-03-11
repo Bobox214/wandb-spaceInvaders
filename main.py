@@ -70,9 +70,10 @@ logging.info("Tensorflow visible devices\n\t"+"\n\t".join(d.name for d in device
 # Evaluation
 
 cumulative_reward = 0
-rewards = deque([0],maxlen=50)
+rewards = deque([0],maxlen=100)
 episode = 0
 frame   = 0
+lastFrame = 0
 
 def evaluate(episodic_reward):
   '''
@@ -85,13 +86,17 @@ def evaluate(episodic_reward):
   '''
   global episode
   global cumulative_reward
+  global lastTime,lastFrame
   episode += 1
   rewards.append(episodic_reward)
   if episode==1 or episode%10==0:
-    mean = sum(rewards)//len(rewards)
-    speed = frame/(time.time()-startTime)
+    mean = sum(rewards)/len(rewards)
+    curTime = time.time()
+    speed = (frame-lastFrame)/(curTime-lastTime)
+    lastTime = curTime
+    lastFrame = frame
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1024*1024)
-    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean50: {mean:4} Speed: {speed:.3f}f/s Mem: {mem:2.2f}GB "+agent.inlineInfo())
+    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean100: {mean:4.2f} Speed: {speed:.3f}f/s Mem: {mem:2.2f}GB "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -121,7 +126,7 @@ def finalize():
   logging.info(f"Saving model to {saveName}")
   recordLastRun(env)
   # Speed
-  duration = time.time()-startTime
+  duration = time.time()-lastTime
   logging.info(f"Run {episode} episodes and {frame/1000}k frames in {duration:.0f}s at {frame/duration:.3f}f/s")
   # Memory consumption
   mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -185,11 +190,12 @@ def recordLastRun(env):
 #env = MaxAndSkipWrapper(env)
 #env = ImageProcessWrapper(env)
 #env = FrameStackWrapper(env)
-#env = ClipRewardWrapper(env)
 #env = NoopResetWrapper(env)
 #env = LossLifeResetWrapper(env)
-env = make_env("PongNoFrameskip-v4",pytorch=False)
-#env = make_env("SpaceInvaders-v0",pytorch=False)
+#env = make_env("PongNoFrameskip-v4",pytorch=False)
+env = make_env("SpaceInvaders-v0",pytorch=False)
+if not args.wandb:
+    env = ClipRewardWrapper(env)
 
 #
 # Create model and load weights if requested
@@ -204,11 +210,11 @@ if args.frames != -1:
 else:
     logging.info(f"Running {args.episodes} episodes of model '{args.model}'")
 
-startTime = time.time()
+lastTime = time.time()
 while True:
-  if config.episodes != -1 and episode>=config.episodes:
+  if args.episodes != -1 and episode>=config.episodes:
       break
-  if config.frames != -1 and frame>=config.frames:
+  if args.frames != -1 and frame>=config.frames:
       break
   # Set reward received in this episode = 0 at the start of the episode
   episodic_reward = 0

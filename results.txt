@@ -3,3 +3,16 @@ ebf0cd8c4ce510dec89687ef3df1534c5657abcf
 python 01_dqn_pong.py
 # Solved in 1192343 frames
 # Speed 36.55 f/s
+--------
+python pong/03_keras_dqn_multiply.py --gpu
+# 1336101: done 719 games, reward 19 mean reward 19.530, eps 0.02, speed 105.07 f/s
+# Solved in 1336101 frames!
+--------
+python main.py -f 2000 --gpu
+# log/saves/DQN_20200310_220924.h5
+# Run 6074 episodes and 1381.534k frames in 35s at 39023.799f/s
+# Mean100 : 21.70 with ClipReward
+python main.py -e 100 --wandb --gpu
+# https://app.wandb.ai/boris-boutillier-qct/qualcomm/runs/ddn6fjx5
+# cumulative_avg_reward 342.75 
+----

@@ -141,12 +141,11 @@ if __name__ == "__main__":
 
     env = wrappers.make_env(args.env)
     env.reset()
-    print("RESET")
 
     net = DQN(env.observation_space.shape, env.action_space.n).to(device)
     tgt_net = DQN(env.observation_space.shape, env.action_space.n).to(device)
     writer = SummaryWriter(comment="-" + args.env)
-    print(net)
+    #print(net)
 
     buffer = ExperienceBuffer(REPLAY_SIZE)
     agent = Agent(env, buffer)
