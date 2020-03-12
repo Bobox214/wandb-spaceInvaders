@@ -17,3 +17,9 @@ python main.py -e 100 --wandb -i log/saves/DQN_20200310_220924.h5
 # https://app.wandb.ai/boris-boutillier-qct/qualcomm/runs/sn5i4bwu
 # cumulative_avg_reward 369.7 
 ----
+ python main.py -f 3000 --gpu
+ # log/saves/DQN_20200311_222440.h5
+ # Episode: 25870 Frame:  2679k Score: 5.50 Mean100: 2.22 Speed: 74.308f/s Mem: 8.72GB Epsilon: 0.10 Loss: 0.10 Q: 9.93
+ python main.py -e 100 --gpu --wandb -i  log/saves/DQN_20200311_222440.h5
+ # https://app.wandb.ai/boris-boutillier-qct/qualcomm/runs/27m7sxfr
+ # cumulative_avg_reward 471.9
