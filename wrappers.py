@@ -10,11 +10,15 @@ class ImageProcessWrapper(gym.ObservationWrapper):
         super().__init__(env)
         self.observation_space = gym.spaces.Box(low=0,high=255,shape=(88,64,1),dtype=np.uint8)
     def observation(self,obs):
+        # Crop
         obs = obs[25:200,15:145]
+        # Keep Y part of image
+        obs = obs[:, :, 0] * 0.299 + obs[:, :, 1] * 0.587 + obs[:, :, 2] * 0.114
+        # Resize
         obs = cv2.resize(obs,(64,88),interpolation=cv2.INTER_AREA)
-        obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
+        # make 3D
         obs = np.expand_dims(obs,2)
-        return obs 
+        return obs.astype(dtype=uint8)
 
 class FrameStackWrapper(gym.ObservationWrapper):
     # Return a stack the last n observations.
@@ -66,6 +70,15 @@ class ClipRewardWrapper(gym.Wrapper):
         obs,reward,done,info=self.env.step(action)
         return obs,np.sign(reward),done,info
 
+class ScaleRewardWrapper(gym.Wrapper):
+    def __init__(self,env,scale=30):
+        super().__init__(env)
+        self.scale = scale
+    # Reduce rewards to +1 0 or -1
+    def step(self,action):
+        obs,reward,done,info=self.env.step(action)
+        return obs,reward/self.scale,done,info
+
 class NoopResetWrapper(gym.Wrapper):
     # Apply a random number of NoOp action after each reset.
     # Nobody seems to know why it helps convergence.
@@ -87,16 +100,19 @@ class NoopResetWrapper(gym.Wrapper):
 class LossLifeResetWrapper(gym.Wrapper):
     # Return done on each loss of life.
     # Only perform a real reset when there was a real done
-    def __init__(self,env):
+    # Reduce reward by lossCost when losing one life
+    def __init__(self,env,lossCost=0):
         super().__init__(env)
         self.lives = 0
         self.realDone = True
+        self.lossCost = lossCost
     def step(self,action):
         obs,reward,done,info = self.env.step(action)
         self.realDone = done
         lives = self.env.unwrapped.ale.lives()
         if lives < self.lives and lives>0:
             done = True
+            reward = reward-lives*self.lossCost
         self.lives = lives
         return obs,reward,done,info
     def reset(self,**kwargs):
@@ -106,4 +122,3 @@ class LossLifeResetWrapper(gym.Wrapper):
             obs,_,_,_ = self.env.step(0)
         self.lives = self.env.unwrapped.ale.lives()
         return obs
-

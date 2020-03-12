@@ -25,6 +25,7 @@ from wrappers import *
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--wandb",action="store_true",help="Log the run in wandb")
+parser.add_argument("--eval",action="store_true",help="No training")
 parser.add_argument("-e","--episodes",type=int,default=-1,help="Number of episodes to play")
 parser.add_argument("-f","--frames",type=int,default=-1,help="Number of k-frames to play")
 parser.add_argument("-i","--input",help="Fullname of the file containing save state of the model to be loaded.")
@@ -96,7 +97,7 @@ def evaluate(episodic_reward):
     lastTime = curTime
     lastFrame = frame
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1024*1024)
-    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4} Mean100: {mean:4.2f} Speed: {speed:.3f}f/s Mem: {mem:2.2f}GB "+agent.inlineInfo())
+    logging.info(f"Episode: {episode:4} Frame: {frame//1000:5}k Score: {episodic_reward:4.2f} Mean100: {mean:4.2f} Speed: {speed:.3f}f/s Mem: {mem:2.2f}GB "+agent.inlineInfo())
 
   if args.wandb:
     if (episode > 100):
@@ -126,7 +127,7 @@ def finalize():
   logging.info(f"Saving model to {saveName}")
   recordLastRun(env)
   # Speed
-  duration = time.time()-lastTime
+  duration = time.time()-startTime
   logging.info(f"Run {episode} episodes and {frame/1000}k frames in {duration:.0f}s at {frame/duration:.3f}f/s")
   # Memory consumption
   mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -144,12 +145,12 @@ config.episodes = args.episodes
 config.frames = args.frames*1000
 config.batch_size = 32
 config.min_experience_size    = 10000
-config.experience_buffer_size = 10000
+config.experience_buffer_size = 30000
 config.learning_rate = 1e-4
 config.device = 'gpu' if args.gpu else 'cpu'
 config.epsilon_start = 1.0
-config.epsilon_end   = 0.02
-config.epsilon_decay_last_frame = 10**5
+config.epsilon_end   = 0.1
+config.epsilon_decay_last_frame = 2*10**5
 
 if args.wandb:
   # initialize a new wandb run
@@ -191,17 +192,18 @@ def recordLastRun(env):
 #env = ImageProcessWrapper(env)
 #env = FrameStackWrapper(env)
 #env = NoopResetWrapper(env)
-#env = LossLifeResetWrapper(env)
 #env = make_env("PongNoFrameskip-v4",pytorch=False)
 env = make_env("SpaceInvaders-v0",pytorch=False)
-if not args.wandb:
-    env = ClipRewardWrapper(env)
+if not args.wandb and not args.eval:
+    #env = ClipRewardWrapper(env)
+    env = LossLifeResetWrapper(env,lossCost=50)
+    env = ScaleRewardWrapper(env,scale=30)
 
 #
 # Create model and load weights if requested
 #
 module = importlib.import_module(f"models.{args.model}")
-agent = module.Model(env,config,eval=args.wandb)
+agent = module.Model(env,config,eval=args.wandb or args.eval)
 if args.input is not None:
   agent.load(args.input)
   logging.info(f"Model for {args.model} loaded from '{args.input}'")
@@ -210,7 +212,8 @@ if args.frames != -1:
 else:
     logging.info(f"Running {args.episodes} episodes of model '{args.model}'")
 
-lastTime = time.time()
+startTime = time.time()
+lastTime = startTime
 while True:
   if args.episodes != -1 and episode>=config.episodes:
       break
@@ -232,7 +235,7 @@ while True:
     agent.remember(state, action, reward, next_state, done)
     state = next_state
 
-    episodic_reward += int(reward)
+    episodic_reward += reward
 
     # Train
     agent.train(frame)
