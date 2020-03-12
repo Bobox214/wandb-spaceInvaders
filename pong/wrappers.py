@@ -94,7 +94,7 @@ class ScaledFloatFrame(gym.ObservationWrapper):
 
 
 class BufferWrapper(gym.ObservationWrapper):
-    def __init__(self, env, n_steps, dtype=np.float32,axis=0):
+    def __init__(self, env, n_steps, dtype=np.uint8,axis=0):
         super(BufferWrapper, self).__init__(env)
         self.dtype = dtype
         self.axis  = axis
@@ -116,7 +116,7 @@ class BufferWrapper(gym.ObservationWrapper):
         return self.buffer
 
 
-def make_env(env_name,pytorch=True):
+def make_env(env_name,pytorch=True,toFloat=True):
     env = gym.make(env_name)
     env = MaxAndSkipEnv(env)
     env = FireResetEnv(env)
@@ -124,4 +124,6 @@ def make_env(env_name,pytorch=True):
     if pytorch:
         env = ImageToPyTorch(env)
     env = BufferWrapper(env, 4,axis=0 if pytorch else 2)
-    return ScaledFloatFrame(env)
+    if toFloat:
+        env = ScaledFloatFrame(env)
+    return env

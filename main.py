@@ -186,18 +186,20 @@ def recordLastRun(env):
     os.system(f'mv {mp4} {saveBaseName}.mp4')
 
 ## Initialize gym environment
-#env = gym.make("SpaceInvaders-v0")
-#env = gym.make("PongNoFrameskip-v4")
-#env = MaxAndSkipWrapper(env)
-#env = ImageProcessWrapper(env)
-#env = FrameStackWrapper(env)
-#env = NoopResetWrapper(env)
+env = gym.make("SpaceInvaders-v0")
+##env = gym.make("PongNoFrameskip-v4")
+env = MaxAndSkipWrapper(env)
+env = ImageProcessWrapper(env)
+env = FrameStackWrapper(env)
+env = NoopResetWrapper(env)
 #env = make_env("PongNoFrameskip-v4",pytorch=False)
-env = make_env("SpaceInvaders-v0",pytorch=False)
+#env = make_env("SpaceInvaders-v0",pytorch=False,toFloat=True)
 if not args.wandb and not args.eval:
     #env = ClipRewardWrapper(env)
-    env = LossLifeResetWrapper(env,lossCost=50)
+    env = LossLifeResetWrapper(env,lossCost=0)
     env = ScaleRewardWrapper(env,scale=30)
+#env = NormalizeWrapper(env)
+env = AsFloatWrapper(env)
 
 #
 # Create model and load weights if requested

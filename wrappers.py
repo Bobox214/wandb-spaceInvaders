@@ -18,7 +18,7 @@ class ImageProcessWrapper(gym.ObservationWrapper):
         obs = cv2.resize(obs,(64,88),interpolation=cv2.INTER_AREA)
         # make 3D
         obs = np.expand_dims(obs,2)
-        return obs.astype(dtype=uint8)
+        return obs.astype(dtype=np.uint8)
 
 class FrameStackWrapper(gym.ObservationWrapper):
     # Return a stack the last n observations.
@@ -63,6 +63,15 @@ class MaxAndSkipWrapper(gym.Wrapper):
         obs = self.env.reset()
         self._obs_buffer[1] = obs
         return obs
+
+class NormalizeWrapper(gym.ObservationWrapper):
+    def observation(self, obs):
+        return obs.astype(np.float32) / 255.0
+
+class AsFloatWrapper(gym.ObservationWrapper):
+    def observation(self, obs):
+        return obs.astype(np.float32)
+
 
 class ClipRewardWrapper(gym.Wrapper):
     # Reduce rewards to +1 0 or -1
@@ -112,7 +121,7 @@ class LossLifeResetWrapper(gym.Wrapper):
         lives = self.env.unwrapped.ale.lives()
         if lives < self.lives and lives>0:
             done = True
-            reward = reward-lives*self.lossCost
+        reward = reward-lives*self.lossCost
         self.lives = lives
         return obs,reward,done,info
     def reset(self,**kwargs):

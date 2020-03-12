@@ -9,7 +9,6 @@ from helpers import *
 class Model:
     """
         Implements the first DQN model published in Nature.
-        ref: 100 ep 1m33 855f/s
     """
     def __init__(self,env,config,eval):
         self.env    = env
@@ -18,7 +17,9 @@ class Model:
         self.memory = ExperienceBuffer(size=config.experience_buffer_size)
         self.action_size = env.action_space.n
         self.learning_rate = config.learning_rate
-        self.epsilon = config.epsilon_start if not eval else config.epsilon_end
+        self.epsilon_start = config.epsilon_start if not eval else 0
+        self.epsilon_end   = config.epsilon_end   if not eval else 0
+        self.epsilon       = config.epsilon_start if not eval else 0
         self.modelCopyRate = 1000
         self.gamma = 0.99
         self.model        = self._build_model()
@@ -62,7 +63,7 @@ class Model:
 
         self.loss = self.model.train_on_batch(states,targets) 
 
-        self.epsilon = max(self.config.epsilon_end,self.config.epsilon_start-frameIdx/self.config.epsilon_decay_last_frame)
+        self.epsilon = max(self.epsilon_end,self.epsilon_start-frameIdx/self.config.epsilon_decay_last_frame)
 
         if frameIdx>self.nextCopy:
             self.target_model.set_weights(self.model.get_weights())
